@@ -14,10 +14,9 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from alphaclash.perception.detector import Detector
+from alphaclash.perception.detector import TOWERS as SKIP, Detector
 
 ROOT = Path(__file__).resolve().parents[1]
-SKIP = {"king-tower", "queen-tower", "cannoneer-tower", "dagger-duchess-tower"}
 IOU = 0.5
 
 

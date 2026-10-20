@@ -62,6 +62,7 @@ def side_crop(img: np.ndarray, xyxy: tuple[float, float, float, float], size: in
 
 
 SIDE_UNSURE = 0.2  # |p_enemy - 0.5| below this -> side None
+TOWERS = {"king-tower", "queen-tower", "cannoneer-tower", "dagger-duchess-tower"}
 
 
 class Detector:
@@ -99,7 +100,10 @@ class Detector:
             if res.names[int(k)] not in NON_UNITS
         ]
         sides = self.sides(img, [b for _, _, b in dets])
-        return [
-            Unit(name, side, round(c, 3), b, to_tile((b[0] + b[2]) / 2, b[3]))
-            for (name, c, b), side in zip(dets, sides)
-        ]
+        units = []
+        for (name, c, b), side in zip(dets, sides):
+            tile = to_tile((b[0] + b[2]) / 2, b[3])
+            if name in TOWERS:  # towers never move: their half of the arena is their side
+                side = "enemy" if tile[1] < GRID[1] / 2 else "mine"
+            units.append(Unit(name, side, round(c, 3), b, tile))
+        return units
