@@ -26,6 +26,21 @@ NEXT_BOX = (48, 1316, 100, 1380)
 NEXT_LABEL = (38, 1280, 112, 1305)  # white "Next:" text; only drawn in battle
 RAISE_SHIFTS = range(-24, 1, 4)
 
+# Tower HP bars: (x0, x1, y_center, color). The fill starts at x0 and shrinks
+# from the right as HP drops. Bars sit up to ~15px higher/lower depending on the
+# arena, so each is searched for within +-BAR_SEARCH rows of y_center.
+# King bars only appear once that tower is damaged (or the king is activated).
+TOWER_BARS = {
+    "enemy_left": (120, 194, 352, "pink"),
+    "enemy_right": (481, 555, 352, "pink"),
+    "enemy_king": (288, 390, 214, "pink"),
+    "my_left": (121, 194, 926, "blue"),
+    "my_right": (481, 555, 926, "blue"),
+    "my_king": (293, 383, 1065, "blue"),
+}
+BAR_SEARCH = 18
+BADGE_W = 30  # gold level badge just left of each princess bar; gone once the tower falls
+
 CARD_DIR = Path(__file__).resolve().parents[3] / "data" / "cards"
 MATCH_MIN = 0.6  # below this a slot is reported as None (occluded / unknown)
 
@@ -66,6 +81,8 @@ class Hud:
     elixir: float | None
     hand: list[str | None]
     next_card: str | None
+    # HP fraction 0-1 per tower; None = not readable this frame (bar occluded).
+    towers: dict[str, float | None]
 
 
 class Screen:
@@ -102,6 +119,61 @@ class Screen:
         end = xs.max() + 150
         return float(np.clip((end - ELIXIR_X0) / (ELIXIR_X10 - ELIXIR_X0) * 10, 0, 10))
 
+    @staticmethod
+    def _bar_mask(a: np.ndarray, color: str) -> np.ndarray:
+        r, g, b = a[..., 0], a[..., 1], a[..., 2]
+        if color == "pink":
+            return (r > 200) & (g < 130) & (b > 110)
+        return (b > 220) & (r < 140) & (g > 150)
+
+    def _bar_fill(self, frame: np.ndarray, x0: int, x1: int, yc: int, color: str) -> tuple[float | None, bool]:
+        """(HP fraction or None, whether any bar was seen at all).
+
+        Bars are only a few px tall, have a border, and my HP digits sit on top of
+        them, so: bar rows = rows with a solid run of bar color; fill end = rightmost
+        bar-colored column in those rows (past it is only dark empty bar or digits).
+        Accurate to ~+-5%.
+        """
+        ya = yc - BAR_SEARCH
+        m = self._bar_mask(frame[ya : yc + BAR_SEARCH, x0 - 5 : x1 + 5].astype(int), color)
+        rows = np.where(m.sum(1) >= 8)[0]
+        if not len(rows):
+            return None, False
+        runs = np.split(rows, np.where(np.diff(rows) > 2)[0] + 1)
+        rr = max(runs, key=len)
+        cols = np.where(m[rr[0] : rr[-1] + 1].any(0))[0]
+        start, end = cols.min() + x0 - 5, cols.max() + x0 - 5
+        if start > x0 + 12:
+            return None, True  # bar color, but not anchored at the bar's left edge
+        frac = float(np.clip((end - x0 + 1) / (x1 - x0 + 1), 0, 1))
+        if frac < 0.95:
+            # A short fill is real only if the bar's right end shows the dark empty
+            # color; otherwise something (troop, spell, tutorial hand) covers it.
+            tail = frame[ya + rr[0] : ya + rr[-1] + 1, x1 - 8 : x1 - 1].astype(int)
+            if not (tail.sum(2) < 330).mean() > 0.6:
+                return None, True
+        return frac, True
+
+    @staticmethod
+    def _badge(frame: np.ndarray, x0: int, yc: int) -> bool:
+        a = frame[yc - BAR_SEARCH - 10 : yc + BAR_SEARCH + 10, x0 - BADGE_W : x0 - 1].astype(int)
+        gold = (a[..., 0] > 200) & (a[..., 1] > 150) & (a[..., 2] < 110)
+        return gold.mean() > 0.05
+
+    def towers(self, frame: np.ndarray) -> dict[str, float | None]:
+        out: dict[str, float | None] = {}
+        for name, (x0, x1, yc, color) in TOWER_BARS.items():
+            fill, seen = self._bar_fill(frame, x0, x1, yc, color)
+            if fill is not None:
+                out[name] = round(fill, 3)
+            elif seen:
+                out[name] = None  # bar visible but partly covered
+            elif name.endswith("king"):
+                out[name] = 1.0  # bar hidden until first damage
+            else:
+                out[name] = None if self._badge(frame, x0, yc) else 0.0
+        return out
+
     def _classify(self, crop: Image.Image) -> tuple[str | None, float]:
         sims = self._mat @ _feat(crop)
         i = int(sims.argmax())
@@ -131,5 +203,5 @@ class Screen:
     def read(self, frame: np.ndarray) -> Hud:
         f = self.normalize(frame)
         if not self.in_battle(f):
-            return Hud(False, None, [None] * 4, None)
-        return Hud(True, round(self.elixir(f), 2), self.hand(f), self.next_card(f))
+            return Hud(False, None, [None] * 4, None, {})
+        return Hud(True, round(self.elixir(f), 2), self.hand(f), self.next_card(f), self.towers(f))
