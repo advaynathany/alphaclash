@@ -4,7 +4,7 @@ A learning agent for Clash Royale that plays the real game on a real device.
 
 ## Ground rules
 - **Never on ladder.** The bot plays only Training Camp and friendly battles between my own alt accounts. Automation breaks Supercell's terms of service; keep the risk to alts I'm fine losing, and never put a bot against people who don't know.
-- The real game runs at 1x speed (~400 games/day per emulator), so most learning comes from recorded human matches, not online self-play.
+- The real game runs at 1x speed (~400 games/day per device), so most learning comes from recorded human matches, not online self-play.
 
 ## Pipeline
 | Stage | What | Status |
