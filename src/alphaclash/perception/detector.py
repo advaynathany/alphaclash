@@ -88,7 +88,10 @@ class Detector:
         return [None if abs(q - 0.5) < SIDE_UNSURE else ("enemy" if q > 0.5 else "mine") for q in p]
 
     def detect(self, frame: np.ndarray) -> list[Unit]:
-        img = arena(frame)
+        return self.detect_arena(arena(frame))
+
+    def detect_arena(self, img: np.ndarray) -> list[Unit]:
+        """Like detect(), on an already-cropped ARENA_SIZE image."""
         res = self.model.predict(img, conf=self.conf, imgsz=self.imgsz, verbose=False)[0]
         dets = [
             (res.names[int(k)], c, tuple(b))
