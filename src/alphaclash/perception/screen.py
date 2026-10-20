@@ -13,6 +13,8 @@ from pathlib import Path
 import numpy as np
 from PIL import Image, ImageOps
 
+from alphaclash.perception.clock import Clock
+
 REF_W, REF_H = 652, 1436
 
 # Elixir bar: sample rows, and fill-end x at 0 and 10 elixir.
@@ -83,6 +85,7 @@ class Hud:
     next_card: str | None
     # HP fraction 0-1 per tower; None = not readable this frame (bar occluded).
     towers: dict[str, float | None]
+    clock: int | None = None  # seconds left; None in Training Camp, overtime, or unreadable
 
 
 class Screen:
@@ -90,6 +93,7 @@ class Screen:
         self.cards = _load_cards()
         self._names = list(self.cards)
         self._mat = np.stack([self.cards[n] for n in self._names])
+        self.clock = Clock()
 
     @staticmethod
     def normalize(frame: np.ndarray) -> np.ndarray:
@@ -204,4 +208,4 @@ class Screen:
         f = self.normalize(frame)
         if not self.in_battle(f):
             return Hud(False, None, [None] * 4, None, {})
-        return Hud(True, round(self.elixir(f), 2), self.hand(f), self.next_card(f), self.towers(f))
+        return Hud(True, round(self.elixir(f), 2), self.hand(f), self.next_card(f), self.towers(f), self.clock.read(f))
