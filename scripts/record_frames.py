@@ -26,7 +26,13 @@ if args.backend == "adb":
 else:
     from alphaclash.device.iphone_mirror import Device
 
-    dev = Device()
+    while True:  # wait for the mirroring window to be on this desktop
+        try:
+            dev = Device()
+            break
+        except RuntimeError as e:
+            print(e)
+            time.sleep(2)
 out = Path("data/frames") / time.strftime("%Y%m%d-%H%M%S")
 out.mkdir(parents=True)
 print(f"screen {dev.screen_size()} -> {out}")
@@ -34,7 +40,18 @@ print(f"screen {dev.screen_size()} -> {out}")
 end, i = time.time() + args.seconds, 0
 while time.time() < end:
     t = time.time()
-    Image.fromarray(dev.screenshot()).save(out / f"{i:06d}.png")
+    try:
+        frame = dev.screenshot()
+    except Exception as e:  # window hidden/moved: wait and re-find it
+        print(f"capture failed ({type(e).__name__}); retrying")
+        time.sleep(1)
+        if hasattr(dev, "refresh"):
+            try:
+                dev.refresh()
+            except RuntimeError:
+                pass
+        continue
+    Image.fromarray(frame).save(out / f"{i:06d}.png")
     i += 1
     time.sleep(max(0.0, 1 / args.fps - (time.time() - t)))
 print(f"saved {i} frames")
